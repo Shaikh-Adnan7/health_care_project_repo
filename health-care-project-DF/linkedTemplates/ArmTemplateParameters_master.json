@@ -1,0 +1,30 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "health-care-project-DF"
+		},
+		"LS_ADLS_Gen2_properties_typeProperties_url": {
+			"value": "https://healthcaresa2026.dfs.core.windows.net/"
+		},
+		"LS_Azure_KeyVault_properties_typeProperties_baseUrl": {
+			"value": "https://health-care-key-vault.vault.azure.net/"
+		},
+		"LS_Azure_SQL_properties_typeProperties_server": {
+			"value": "health-care-project-server2026.database.windows.net"
+		},
+		"LS_Azure_SQL_properties_typeProperties_database": {
+			"value": "health_care_db"
+		},
+		"LS_Azure_SQL_properties_typeProperties_userName": {
+			"value": "avd"
+		},
+		"containerUri": {
+			"value": ""
+		},
+		"containerSasToken": {
+			"value": ""
+		}
+	}
+}
