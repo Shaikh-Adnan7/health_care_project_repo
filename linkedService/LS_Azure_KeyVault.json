@@ -1,0 +1,10 @@
+{
+	"name": "LS_Azure_KeyVault",
+	"properties": {
+		"annotations": [],
+		"type": "AzureKeyVault",
+		"typeProperties": {
+			"baseUrl": "https://health-care-key-vault.vault.azure.net/"
+		}
+	}
+}
