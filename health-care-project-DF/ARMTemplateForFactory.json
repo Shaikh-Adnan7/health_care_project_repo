@@ -42,6 +42,8 @@
 					{
 						"name": "LKP_Get_Table_Metadata",
 						"type": "Lookup",
+						"state": "Inactive",
+						"onInactiveMarkAs": "Succeeded",
 						"dependsOn": [],
 						"policy": {
 							"timeout": "0.12:00:00",
@@ -68,6 +70,298 @@
 							},
 							"firstRowOnly": false
 						}
+					},
+					{
+						"name": "FE_Iterate_Tables",
+						"type": "ForEach",
+						"state": "Inactive",
+						"onInactiveMarkAs": "Succeeded",
+						"dependsOn": [
+							{
+								"activity": "LKP_Get_Table_Metadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('LKP_Get_Table_Metadata').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "LKP_Get_New_Watermark",
+									"type": "Lookup",
+									"state": "Active",
+									"onInactiveMarkAs": "Succeeded",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "@concat(\n    'SELECT CONVERT(VARCHAR(23), MAX([',\n    item().watermark_column,\n    ']), 121) AS new_watermark FROM [',\n    item().schema_name,\n    '].[',\n    item().table_name,\n    ']'\n)",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"dataset": {
+											"referenceName": "DS_SQL_Dynamic",
+											"type": "DatasetReference",
+											"parameters": {
+												"schema_name": {
+													"value": "@item().schema_name",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "@item().table_name",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								},
+								{
+									"name": "If Condition1",
+									"type": "IfCondition",
+									"dependsOn": [
+										{
+											"activity": "LKP_Get_New_Watermark",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@greater(\n    ticks(\n        coalesce(\n            activity('LKP_Get_New_Watermark').output.firstRow.new_watermark,\n            item().last_watermark\n        )\n    ),\n    ticks(item().last_watermark)\n)",
+											"type": "Expression"
+										},
+										"ifTrueActivities": [
+											{
+												"name": "CP_SQL_TO_RAW",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzureSqlSource",
+														"sqlReaderQuery": {
+															"value": "@concat(\n    'SELECT * FROM [',\n    item().schema_name,\n    '].[',\n    item().table_name,\n    '] WHERE [',\n    item().watermark_column,\n    '] > ''',\n    item().last_watermark,\n    ''' AND [',\n    item().watermark_column,\n    '] <= ''',\n    activity('LKP_Get_New_Watermark').output.firstRow.new_watermark,\n    ''''\n)",
+															"type": "Expression"
+														},
+														"queryTimeout": "02:00:00",
+														"partitionOption": "None"
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings"
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DS_SQL_Dynamic",
+														"type": "DatasetReference",
+														"parameters": {
+															"schema_name": {
+																"value": "@item().schema_name",
+																"type": "Expression"
+															},
+															"table_name": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															}
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DS_ADLS_Parquet_Dynamic",
+														"type": "DatasetReference",
+														"parameters": {
+															"folder_path": {
+																"value": "@concat(\n    item().table_name,\n    '/',\n    formatDateTime(pipeline().TriggerTime,'yyyy/MM/dd')\n)",
+																"type": "Expression"
+															},
+															"file_name": {
+																"value": "@concat(\n    item().table_name\n)",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											},
+											{
+												"name": "SP_Update_Watermark",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "CP_SQL_TO_RAW",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[[dbo].[usp_update_watermark]",
+													"storedProcedureParameters": {
+														"new_watermark": {
+															"value": {
+																"value": "@activity('LKP_Get_New_Watermark').output.firstRow.new_watermark",
+																"type": "Expression"
+															},
+															"type": "DateTime"
+														},
+														"table_id": {
+															"value": {
+																"value": "@item().table_id",
+																"type": "Expression"
+															},
+															"type": "Int32"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "LS_Azure_SQL",
+													"type": "LinkedServiceReference"
+												}
+											}
+										]
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "LKP_GET_META_DATA",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "SELECT\n    table_id,\n    schema_name,\n    table_name,\n    watermark_column,\n    CONVERT(VARCHAR(23), last_watermark, 121) AS last_watermark\nFROM dbo.ingestion_control\nWHERE is_active = 1\nORDER BY table_id;",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DS_SQL_Dynamic",
+								"type": "DatasetReference",
+								"parameters": {
+									"schema_name": "dbo",
+									"table_name": "ingestion_control"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "FE_ITTRATE_TABLE",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "LKP_GET_META_DATA",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('LKP_GET_META_DATA').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"activities": [
+								{
+									"name": "getwaterma",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "@item()",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"dataset": {
+											"referenceName": "DS_SQL_Dynamic",
+											"type": "DatasetReference",
+											"parameters": {
+												"schema_name": {
+													"value": "@item().schema_name",
+													"type": "Expression"
+												},
+												"table_name": {
+													"value": "@item().table_name",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								}
+							]
+						}
 					}
 				],
 				"policy": {
@@ -76,7 +370,9 @@
 				"annotations": []
 			},
 			"dependsOn": [
-				"[concat(variables('factoryId'), '/datasets/DS_SQL_Dynamic')]"
+				"[concat(variables('factoryId'), '/datasets/DS_SQL_Dynamic')]",
+				"[concat(variables('factoryId'), '/datasets/DS_ADLS_Parquet_Dynamic')]",
+				"[concat(variables('factoryId'), '/linkedServices/LS_Azure_SQL')]"
 			]
 		},
 		{
