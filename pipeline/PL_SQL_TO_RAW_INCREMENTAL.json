@@ -331,7 +331,14 @@
 				"name": "NOTIFY_ON_SUCCESS",
 				"description": "",
 				"type": "WebActivity",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "FE_Iterate_Tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
