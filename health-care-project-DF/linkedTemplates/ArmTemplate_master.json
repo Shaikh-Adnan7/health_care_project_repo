@@ -7,6 +7,14 @@
 			"metadata": "Data Factory name",
 			"defaultValue": "health-care-project-DF"
 		},
+		"LS_ADB_accessToken": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accessToken' of 'LS_ADB'"
+		},
+		"LS_ADB_properties_typeProperties_existingClusterId": {
+			"type": "string",
+			"defaultValue": "1123-162420-y5tiyra3"
+		},
 		"LS_ADLS_Gen2_properties_typeProperties_url": {
 			"type": "string",
 			"defaultValue": "https://healthcaresa2026.dfs.core.windows.net/"
@@ -53,6 +61,12 @@
 				"parameters": {
 					"factoryName": {
 						"value": "[parameters('factoryName')]"
+					},
+					"LS_ADB_accessToken": {
+						"value": "[parameters('LS_ADB_accessToken')]"
+					},
+					"LS_ADB_properties_typeProperties_existingClusterId": {
+						"value": "[parameters('LS_ADB_properties_typeProperties_existingClusterId')]"
 					},
 					"LS_ADLS_Gen2_properties_typeProperties_url": {
 						"value": "[parameters('LS_ADLS_Gen2_properties_typeProperties_url')]"

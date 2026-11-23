@@ -5,6 +5,12 @@
 		"factoryName": {
 			"value": "health-care-project-DF"
 		},
+		"LS_ADB_accessToken": {
+			"value": ""
+		},
+		"LS_ADB_properties_typeProperties_existingClusterId": {
+			"value": "1123-162420-y5tiyra3"
+		},
 		"LS_ADLS_Gen2_properties_typeProperties_url": {
 			"value": "https://healthcaresa2026.dfs.core.windows.net/"
 		},

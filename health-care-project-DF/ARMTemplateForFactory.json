@@ -7,6 +7,14 @@
 			"metadata": "Data Factory name",
 			"defaultValue": "health-care-project-DF"
 		},
+		"LS_ADB_accessToken": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accessToken' of 'LS_ADB'"
+		},
+		"LS_ADB_properties_typeProperties_existingClusterId": {
+			"type": "string",
+			"defaultValue": "1123-162420-y5tiyra3"
+		},
 		"LS_ADLS_Gen2_properties_typeProperties_url": {
 			"type": "string",
 			"defaultValue": "https://healthcaresa2026.dfs.core.windows.net/"
@@ -42,8 +50,6 @@
 					{
 						"name": "LKP_Get_Table_Metadata",
 						"type": "Lookup",
-						"state": "Inactive",
-						"onInactiveMarkAs": "Succeeded",
 						"dependsOn": [],
 						"policy": {
 							"timeout": "0.12:00:00",
@@ -74,8 +80,6 @@
 					{
 						"name": "FE_Iterate_Tables",
 						"type": "ForEach",
-						"state": "Inactive",
-						"onInactiveMarkAs": "Succeeded",
 						"dependsOn": [
 							{
 								"activity": "LKP_Get_Table_Metadata",
@@ -225,11 +229,133 @@
 												]
 											},
 											{
+												"name": "NOTIFY_ON_SUCCESS",
+												"description": "",
+												"type": "WebActivity",
+												"dependsOn": [
+													{
+														"activity": "CP_SQL_TO_RAW",
+														"dependencyConditions": [
+															"Failed"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"method": "POST",
+													"headers": {},
+													"url": "https://prod-06.centralindia.logic.azure.com:443/workflows/6b0bed26e6664091b12fc3fc31b80506/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=AgKdqOMpVypbwwgpqSSc7qoAigweccHuKoXteygs_1I",
+													"body": {
+														"value": "{\n    \"pipelineName\" : @{pipeline().Pipeline},\n    \"DataFactoryName\" : @{pipeline().DataFactory},\n    \"RunId\": @{pipeline().RunId},\n}",
+														"type": "Expression"
+													}
+												}
+											},
+											{
+												"name": "SP_Insert_Log_Info",
+												"type": "SqlServerStoredProcedure",
+												"dependsOn": [
+													{
+														"activity": "SP_Update_Watermark",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"storedProcedureName": "[[dbo].[proc_for_log_info]",
+													"storedProcedureParameters": {
+														"copied_rows": {
+															"value": {
+																"value": "@int(activity('CP_SQL_TO_RAW').output.rowsCopied)",
+																"type": "Expression"
+															},
+															"type": "Int64"
+														},
+														"pipeline_run_id": {
+															"value": {
+																"value": "@pipeline().RunId",
+																"type": "Expression"
+															},
+															"type": "String"
+														},
+														"read_rows": {
+															"value": {
+																"value": "@int(activity('CP_SQL_TO_RAW').output.rowsCopied)",
+																"type": "Expression"
+															},
+															"type": "Int64"
+														},
+														"table_name": {
+															"value": {
+																"value": "@item().table_name",
+																"type": "Expression"
+															},
+															"type": "String"
+														}
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "LS_Azure_SQL",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
+												"name": "NB_RAW_TO_BRONZE",
+												"type": "DatabricksNotebook",
+												"dependsOn": [
+													{
+														"activity": "CP_SQL_TO_RAW",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"notebookPath": "/Users/adnan@sameerpatel5116outlook.onmicrosoft.com/Health_care_Project_NoteBooks/RAW_TO_BRONZE",
+													"baseParameters": {
+														"batch_info": {
+															"value": "@concat(\n  '[{\"table_name\":\"',\n  item().table_name,\n  '\",\"source_path\":\"abfss://raw@healthcaresa2026.dfs.core.windows.net/',\n  item().table_name,\n  '/',\n  formatDateTime(utcNow(),'yyyy/MM/dd'),\n  '/',\n  item().table_name,\n  '/\"}]'\n)",
+															"type": "Expression"
+														},
+														"target_container": "bronz",
+														"catalog_name": "healthcare_catalog"
+													}
+												},
+												"linkedServiceName": {
+													"referenceName": "LS_ADB",
+													"type": "LinkedServiceReference"
+												}
+											},
+											{
 												"name": "SP_Update_Watermark",
 												"type": "SqlServerStoredProcedure",
 												"dependsOn": [
 													{
-														"activity": "CP_SQL_TO_RAW",
+														"activity": "NB_RAW_TO_BRONZE",
 														"dependencyConditions": [
 															"Succeeded"
 														]
@@ -272,96 +398,6 @@
 								}
 							]
 						}
-					},
-					{
-						"name": "LKP_GET_META_DATA",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzureSqlSource",
-								"sqlReaderQuery": "SELECT\n    table_id,\n    schema_name,\n    table_name,\n    watermark_column,\n    CONVERT(VARCHAR(23), last_watermark, 121) AS last_watermark\nFROM dbo.ingestion_control\nWHERE is_active = 1\nORDER BY table_id;",
-								"queryTimeout": "02:00:00",
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DS_SQL_Dynamic",
-								"type": "DatasetReference",
-								"parameters": {
-									"schema_name": "dbo",
-									"table_name": "ingestion_control"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "FE_ITTRATE_TABLE",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "LKP_GET_META_DATA",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('LKP_GET_META_DATA').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"activities": [
-								{
-									"name": "getwaterma",
-									"type": "Lookup",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "AzureSqlSource",
-											"sqlReaderQuery": {
-												"value": "@item()",
-												"type": "Expression"
-											},
-											"queryTimeout": "02:00:00",
-											"partitionOption": "None"
-										},
-										"dataset": {
-											"referenceName": "DS_SQL_Dynamic",
-											"type": "DatasetReference",
-											"parameters": {
-												"schema_name": {
-													"value": "@item().schema_name",
-													"type": "Expression"
-												},
-												"table_name": {
-													"value": "@item().table_name",
-													"type": "Expression"
-												}
-											}
-										}
-									}
-								}
-							]
-						}
 					}
 				],
 				"policy": {
@@ -372,7 +408,8 @@
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/datasets/DS_SQL_Dynamic')]",
 				"[concat(variables('factoryId'), '/datasets/DS_ADLS_Parquet_Dynamic')]",
-				"[concat(variables('factoryId'), '/linkedServices/LS_Azure_SQL')]"
+				"[concat(variables('factoryId'), '/linkedServices/LS_Azure_SQL')]",
+				"[concat(variables('factoryId'), '/linkedServices/LS_ADB')]"
 			]
 		},
 		{
@@ -449,6 +486,24 @@
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/linkedServices/LS_Azure_SQL')]"
 			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_ADB')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureDatabricks",
+				"typeProperties": {
+					"domain": "https://adb-7405611114613684.4.azuredatabricks.net",
+					"accessToken": {
+						"type": "SecureString",
+						"value": "[parameters('LS_ADB_accessToken')]"
+					},
+					"existingClusterId": "[parameters('LS_ADB_properties_typeProperties_existingClusterId')]"
+				}
+			},
+			"dependsOn": []
 		},
 		{
 			"name": "[concat(parameters('factoryName'), '/LS_ADLS_Gen2')]",
